@@ -1,11 +1,15 @@
 package br.scannerdocs.app.ui
 
+import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
@@ -18,11 +22,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import br.scannerdocs.app.data.DocStore
 import br.scannerdocs.app.data.ScanDoc
+import br.scannerdocs.app.scanner.ScannerViewModel
+import br.scannerdocs.app.scanner.ScannerViewModel.Pedido
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
+import java.io.File
 
 @Composable
 fun App(vm: MainViewModel) {
@@ -45,7 +55,68 @@ fun App(vm: MainViewModel) {
         }
     }
 
-    // ----- scanner do Google (câmera, bordas, recorte, filtros, galeria) -----
+    // ----- scanner próprio (funciona sem o Google Play Services) -----
+    val scanner: ScannerViewModel = viewModel()
+    var fotoPendente by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { _ ->
+        // Alguns apps de câmera devolvem "cancelado" mesmo tendo salvo a foto: vale o arquivo.
+        val foto = fotoPendente?.let { File(it) }
+        fotoPendente = null
+        if (foto != null && foto.isFile && foto.length() > 0) {
+            scanner.fotoTirada(foto)
+        } else {
+            foto?.delete()
+            scanner.capturaCancelada()
+        }
+    }
+
+    fun abrirCamera() {
+        val foto = scanner.novoArquivoFoto()
+        fotoPendente = foto.path
+        try {
+            cameraLauncher.launch(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", foto))
+        } catch (e: ActivityNotFoundException) {
+            fotoPendente = null
+            scanner.avisar("Nenhum app de câmera encontrado")
+            scanner.capturaCancelada()
+        }
+    }
+
+    val permissaoCamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) {
+            abrirCamera()
+        } else {
+            scanner.avisar("Sem permissão para usar a câmera")
+            scanner.capturaCancelada()
+        }
+    }
+
+    val galeriaLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(30)) { uris ->
+        if (uris.isEmpty()) scanner.capturaCancelada() else scanner.importar(uris)
+    }
+
+    fun abrirGaleria() {
+        try {
+            galeriaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        } catch (e: ActivityNotFoundException) {
+            scanner.avisar("Nenhum app de galeria encontrado")
+            scanner.capturaCancelada()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        scanner.pedidos.collect { pedido ->
+            when (pedido) {
+                Pedido.CAMERA -> if (precisaPermissaoCamera(context)) permissaoCamera.launch(Manifest.permission.CAMERA) else abrirCamera()
+                Pedido.GALERIA -> abrirGaleria()
+            }
+        }
+    }
+    LaunchedEffect(Unit) { scanner.avisos.collect { snackbar.showSnackbar(it) } }
+    LaunchedEffect(Unit) { scanner.concluidos.collect { vm.salvarEscaneadas(it.anexarEm, it.arquivos) } }
+
+    // ----- scanner do Google (usado quando o celular tem; senão, o próprio) -----
     val scanLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { res ->
@@ -56,7 +127,11 @@ fun App(vm: MainViewModel) {
         }
         vm.aoEscanear(uris)
     }
-    val escanear: (String?) -> Unit = { anexarEm ->
+    val escanear: (String?) -> Unit = escanear@{ anexarEm ->
+        if (vm.scannerGoogleIndisponivel) {
+            scanner.iniciar(anexarEm, Pedido.CAMERA)
+            return@escanear
+        }
         vm.prepararScan(anexarEm)
         val opcoes = GmsDocumentScannerOptions.Builder()
             .setGalleryImportAllowed(true)
@@ -68,14 +143,14 @@ fun App(vm: MainViewModel) {
             .addOnSuccessListener { sender ->
                 scanLauncher.launch(IntentSenderRequest.Builder(sender).build())
             }
-            .addOnFailureListener { e ->
+            .addOnFailureListener {
+                // Este celular não tem o scanner do Google: usa o scanner do próprio app.
                 vm.prepararScan(null)
-                vm.avisar(
-                    "Não foi possível abrir o scanner. Confira se o Google Play Services está " +
-                        "atualizado e se há internet na primeira vez. (${e.message})"
-                )
+                vm.scannerGoogleIndisponivel = true
+                scanner.iniciar(anexarEm, Pedido.CAMERA)
             }
     }
+    val importar: (String?) -> Unit = { anexarEm -> scanner.iniciar(anexarEm, Pedido.GALERIA) }
 
     // ----- salvar PDF numa pasta escolhida (Downloads, Drive…) -----
     val salvarLauncher = rememberLauncherForActivityResult(
@@ -95,14 +170,17 @@ fun App(vm: MainViewModel) {
     }
 
     // ----- telas -----
-    BackHandler(enabled = vm.tela !is Tela.Inicio) { vm.voltar() }
+    BackHandler(enabled = !scanner.ativo && vm.tela !is Tela.Inicio) { vm.voltar() }
 
-    when (val t = vm.tela) {
+    if (scanner.ativo) {
+        TelaScanner(scanner, snackbar)
+    } else when (val t = vm.tela) {
         Tela.Inicio -> TelaInicio(
             docs = vm.docs,
             carregado = vm.carregado,
             snackbar = snackbar,
             onEscanear = { escanear(null) },
+            onImportar = { importar(null) },
             onAbrir = { vm.abrirDocumento(it.id) },
             onCompartilhar = { vm.compartilharPdf(it.id) },
             onSalvar = salvar,
@@ -117,6 +195,7 @@ fun App(vm: MainViewModel) {
                 onVoltar = vm::voltar,
                 onAbrirPagina = { vm.abrirPagina(doc.id, it) },
                 onAdicionar = { escanear(doc.id) },
+                onAdicionarDaGaleria = { importar(doc.id) },
                 onCompartilhar = { vm.compartilharPdf(doc.id) },
                 onCompartilharImagens = { vm.compartilharImagens(doc.id) },
                 onSalvar = { salvar(doc) },
@@ -187,4 +266,17 @@ fun App(vm: MainViewModel) {
     }
 
     vm.ocupado?.let { DialogoAguarde(it) }
+}
+
+/** Só precisa pedir a permissão da câmera se alguma biblioteca a declarou no manifesto. */
+private fun precisaPermissaoCamera(context: Context): Boolean {
+    val declarada = try {
+        @Suppress("DEPRECATION")
+        context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+            .requestedPermissions?.contains(Manifest.permission.CAMERA) == true
+    } catch (e: Exception) {
+        false
+    }
+    return declarada &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
 }

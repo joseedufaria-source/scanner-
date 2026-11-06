@@ -67,6 +67,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Documento que vai receber as páginas do próximo scan (null = documento novo). */
     private var anexarEm: String? = null
 
+    /** O scanner do Google não funciona neste celular: usar o scanner do próprio app. */
+    var scannerGoogleIndisponivel = false
+
     init {
         viewModelScope.launch {
             docs = withContext(Dispatchers.IO) { store.list() }
@@ -112,17 +115,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val alvo = anexarEm
         anexarEm = null
         if (uris.isEmpty()) return
-        executar("Salvando ${paginas(uris.size)}…") {
-            if (alvo != null && store.get(alvo) != null) {
-                store.addPages(alvo, uris)
-                avisar(if (uris.size == 1) "1 página adicionada" else "${uris.size} páginas adicionadas")
-                Tela.Documento(alvo)
-            } else {
-                val doc = store.create(nomePadrao(), uris)
-                Tela.Documento(doc.id)
+        executar("Salvando ${paginas(uris.size)}…") { salvarPaginas(alvo, uris) }
+    }
+
+    /** Páginas prontas do scanner próprio (arquivos temporários, apagados depois de copiados). */
+    fun salvarEscaneadas(alvo: String?, arquivos: List<File>) {
+        if (arquivos.isEmpty()) return
+        executar("Salvando ${paginas(arquivos.size)}…") {
+            try {
+                salvarPaginas(alvo, arquivos.map { Uri.fromFile(it) })
+            } finally {
+                arquivos.forEach { it.delete() }
             }
         }
     }
+
+    private fun salvarPaginas(alvo: String?, uris: List<Uri>): Tela =
+        if (alvo != null && store.get(alvo) != null) {
+            store.addPages(alvo, uris)
+            avisar(if (uris.size == 1) "1 página adicionada" else "${uris.size} páginas adicionadas")
+            Tela.Documento(alvo)
+        } else {
+            Tela.Documento(store.create(nomePadrao(), uris).id)
+        }
 
     // ---------- edição ----------
 

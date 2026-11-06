@@ -64,6 +64,7 @@ fun TelaInicio(
     carregado: Boolean,
     snackbar: SnackbarHostState,
     onEscanear: () -> Unit,
+    onImportar: () -> Unit,
     onAbrir: (ScanDoc) -> Unit,
     onCompartilhar: (ScanDoc) -> Unit,
     onSalvar: (ScanDoc) -> Unit,
@@ -115,6 +116,9 @@ fun TelaInicio(
                 TopAppBar(
                     title = { Text("Scanner", fontWeight = FontWeight.SemiBold) },
                     actions = {
+                        IconButton(onClick = onImportar) {
+                            Icon(painterResource(R.drawable.ic_imagem), contentDescription = "Importar fotos da galeria")
+                        }
                         if (docs.isNotEmpty()) {
                             IconButton(onClick = { buscando = true }) {
                                 Icon(Icons.Filled.Search, contentDescription = "Buscar")

@@ -2,9 +2,10 @@
 
 App Android para escanear documentos com a câmera do celular, no estilo dos apps de scanner de documentos:
 
-- **Escanear** com detecção automática das bordas, recorte, correção de perspectiva e filtros
-  (colorido, tons de cinza, preto e branco), usando o scanner de documentos do Google (ML Kit).
-  Também importa fotos da galeria.
+- **Escanear** com detecção automática das bordas da folha, cantos ajustáveis (com lupa), correção de
+  perspectiva e filtros (Original, Realçar, Cinza, Preto e branco). Também importa fotos da galeria.
+  O app tem scanner próprio, que funciona em qualquer celular; se o celular tiver o scanner de documentos
+  do Google (Play Services), ele é usado no lugar.
 - **Vários documentos e várias páginas**: lista com miniaturas, busca pelo nome, renomear, excluir.
 - **Páginas**: ver em tela cheia com zoom, girar, mudar a ordem, excluir, adicionar mais páginas.
 - **PDF**: compartilhar (WhatsApp, e-mail…) ou salvar no celular / Google Drive.
@@ -26,12 +27,9 @@ O GitHub monta o APK sozinho a cada alteração no código (aba **Actions**, flu
 
 Para atualizar, é só baixar e instalar o APK novo por cima: os documentos continuam lá.
 
-Na primeira vez que usar o scanner, o Google Play Services baixa o módulo de câmera (precisa de internet só nessa hora).
-
 ### Requisitos
 
 - Android 8.0 ou mais novo.
-- Google Play Services (presente em quase todos os celulares Android).
 
 ## Para quem for mexer no código
 
@@ -44,7 +42,9 @@ Projeto Kotlin + Jetpack Compose. Abra a pasta no Android Studio ou compile com:
 | O quê | Onde |
 |---|---|
 | Telas (lista, documento, página com zoom) e diálogos | `app/src/main/java/br/scannerdocs/app/ui/` |
-| Regras: scanner, OCR, compartilhar, salvar | `ui/MainViewModel.kt`, `ui/App.kt` |
+| Regras: OCR, compartilhar, salvar | `ui/MainViewModel.kt`, `ui/App.kt` |
+| Scanner próprio: fluxo (câmera/galeria → cantos → filtro) e telas | `scanner/ScannerViewModel.kt`, `ui/TelaScanner.kt` |
+| Detecção da folha e filtros (Kotlin puro, testável fora do Android) | `scanner/Detector.kt`, `scanner/Filtro.kt` |
 | Armazenamento (pasta por documento + `doc.json`) | `data/DocStore.kt` |
 | Geração do PDF (embute o JPEG direto, sem recomprimir) | `pdf/PdfWriter.kt` |
 | Compilação automática do APK | `.github/workflows/gerar-apk.yml` |

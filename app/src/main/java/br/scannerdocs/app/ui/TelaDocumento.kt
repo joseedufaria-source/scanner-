@@ -58,6 +58,7 @@ fun TelaDocumento(
     onVoltar: () -> Unit,
     onAbrirPagina: (Int) -> Unit,
     onAdicionar: () -> Unit,
+    onAdicionarDaGaleria: () -> Unit,
     onCompartilhar: () -> Unit,
     onCompartilharImagens: () -> Unit,
     onSalvar: () -> Unit,
@@ -93,6 +94,11 @@ fun TelaDocumento(
                             Icon(Icons.Filled.MoreVert, contentDescription = "Mais opções")
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Adicionar fotos da galeria") },
+                                leadingIcon = { Icon(painterResource(R.drawable.ic_imagem), null) },
+                                onClick = { menu = false; onAdicionarDaGaleria() },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Compartilhar como imagens (JPG)") },
                                 leadingIcon = { Icon(painterResource(R.drawable.ic_imagem), null) },
