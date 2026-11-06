@@ -1,0 +1,33 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- reduzido para caber na área segura dos ícones redondos -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.72"
+        android:scaleY="0.72">
+        <!-- folha -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M38,30h22l12,12v36a2,2 0,0 1,-2 2H38a2,2 0,0 1,-2 -2V32a2,2 0,0 1,2 -2z" />
+        <!-- canto dobrado -->
+        <path
+            android:fillColor="#99F6E4"
+            android:pathData="M60,30l12,12H62a2,2 0,0 1,-2 -2z" />
+        <!-- linhas de texto -->
+        <path
+            android:fillColor="#0F766E"
+            android:pathData="M42,48h24v3H42zM42,56h24v3H42zM42,64h16v3H42z" />
+        <!-- faixa de leitura -->
+        <path
+            android:fillColor="#FBBF24"
+            android:pathData="M28,59h52v3H28z" />
+        <!-- cantos de enquadramento -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M26,22h10v3H29v7h-3zM82,22h-10v3h7v7h3zM26,88h10v-3H29v-7h-3zM82,88h-10v-3h7v-7h3z" />
+    </group>
+</vector>

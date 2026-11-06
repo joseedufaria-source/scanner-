@@ -1,0 +1,72 @@
+name: Gerar APK
+
+# Roda a cada envio de código e também pelo botão "Run workflow" na aba Actions.
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERSION_CODE: ${{ github.run_number }}
+      VERSION_NAME: 1.0.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Se existir o segredo KEYSTORE_BASE64 no repositório, usa essa chave em vez da que está na pasta keystore/.
+      - name: Chave de assinatura (opcional, via segredos)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/scanner.jks"
+            echo "KEYSTORE_PATH=$RUNNER_TEMP/scanner.jks" >> "$GITHUB_ENV"
+          fi
+
+      - name: Compilar APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          # Segredos vazios não devem apagar os valores padrão do build.gradle.kts.
+          [ -z "$KEYSTORE_PASSWORD" ] && unset KEYSTORE_PASSWORD
+          [ -z "$KEY_ALIAS" ] && unset KEY_ALIAS
+          [ -z "$KEY_PASSWORD" ] && unset KEY_PASSWORD
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk Scanner.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Scanner-${{ env.VERSION_NAME }}
+          path: Scanner.apk
+
+      # Na branch principal, publica o APK na página "Releases" (fácil de baixar pelo celular).
+      - name: Publicar em Releases
+        if: github.ref_name == github.event.repository.default_branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION_NAME" Scanner.apk \
+            --target "$GITHUB_SHA" \
+            --title "Scanner $VERSION_NAME" \
+            --notes "APK gerado automaticamente a partir do commit ${GITHUB_SHA::7}. Baixe o arquivo Scanner.apk abaixo." \
+            --latest \
+          || gh release upload "v$VERSION_NAME" Scanner.apk --clobber
